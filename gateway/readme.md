@@ -4,7 +4,7 @@
 
 This is a **Spring Cloud Gateway configuration class**, where you define routing logic. The main goal is:
 
-> **Intercept all `/scaffold/**` requests, validate them through the `cryptauth` (CA Authentication) service first, and only forward them to the business service if authentication succeeds.**
+Intercept all `/scaffold/**` requests, validate them through the `cryptauth` (CA Authentication) service first, and only forward them to the business service if authentication succeeds.
 
 ---
 
