@@ -1,3 +1,206 @@
+## 📌 Purpose of the Class
+
+This class is the core **Spring Security configuration**. It provides:
+
+- ✅ JWT-based login and authentication  
+- ✅ Request-level permission control (which endpoints require login, which don't)  
+- ✅ Custom exception handling (authentication failure, access denied)  
+- ✅ Cross-Origin Resource Sharing (CORS) configuration  
+- ✅ Fully **stateless session** handling (ideal for front-end/back-end separation)
+
+---
+
+## 🧱 Class Structure
+
+```java
+@Configuration
+@EnableMethodSecurity(securedEnabled = true, jsr250Enabled = true)
+public class SecurityConfig {
+```
+
+- `@Configuration`: Marks it as a Spring configuration class  
+- `@EnableMethodSecurity`: Enables method-level security annotations like `@Secured`, `@RolesAllowed`
+
+---
+
+### 👇 Injected Components
+
+```java
+private final UserAccountServiceImpl userDetailsService;
+private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
+```
+
+These components serve the following roles:
+
+- **userDetailsService**: Custom service for loading user details (roles, credentials, etc.)
+- **jwtAuthenticationEntryPoint**: Handles cases when the user is **not authenticated** (returns 401)
+- **jwtAccessDeniedHandler**: Handles cases when the user is **authenticated but lacks permission** (returns 403)
+
+---
+
+## 🔐 JWT Authentication Filter
+
+```java
+@Bean
+public JwtAuthenticationFilter jwtAuthenticationFilter() {
+    return new JwtAuthenticationFilter(...);
+}
+```
+
+- Defines your custom `JwtAuthenticationFilter`, which intercepts every request and validates the JWT token from the header.
+
+---
+
+## 🛡️ Core Security Configuration — `filterChain`
+
+```java
+@Bean
+public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter)
+```
+
+### ✅ Main Configurations:
+
+#### 1. Disable CSRF
+
+```java
+http.csrf(AbstractHttpConfigurer::disable)
+```
+
+CSRF protection is disabled because this is a stateless REST API using tokens, not cookies/sessions.
+
+---
+
+#### 2. Define Authorization Rules
+
+```java
+.authorizeHttpRequests(auth -> auth
+    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+    .requestMatchers("/login/**", "/swagger-ui/**", ...).permitAll()
+    .anyRequest().authenticated()
+)
+```
+
+- Allows all OPTIONS preflight requests (for CORS)
+- Permits open access to login and Swagger API docs
+- All other endpoints require authentication
+
+---
+
+#### 3. Add JWT Filter
+
+```java
+.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+```
+
+Your JWT filter is inserted into the Spring Security filter chain before the default login filter.
+
+---
+
+#### 4. Exception Handling
+
+```java
+.exceptionHandling(e -> e
+    .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+    .accessDeniedHandler(jwtAccessDeniedHandler)
+)
+```
+
+- If not logged in → `jwtAuthenticationEntryPoint` returns a 401 error  
+- If permission is denied → `jwtAccessDeniedHandler` returns a 403 error
+
+---
+
+#### 5. Stateless Session
+
+```java
+.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+```
+
+This ensures that **no HTTP session is created**. Each request must carry its own authentication token (e.g. JWT).
+
+---
+
+#### 6. Enable CORS
+
+```java
+http.cors(c -> c.configurationSource(corsConfigurationSource()));
+```
+
+Enables your custom CORS configuration (see below).
+
+---
+
+## 🌐 CORS Configuration
+
+```java
+@Bean
+public CorsConfigurationSource corsConfigurationSource()
+```
+
+Allows front-end applications (Vue, etc.) hosted on different domains/IPs to access your backend API.
+
+- Multiple allowed origins: IPs, localhost, etc.
+- All HTTP methods allowed
+- All headers allowed
+- Credentials allowed (like cookies or Authorization headers)
+
+---
+
+## 🔑 Password Encoder (For Login/Register)
+
+```java
+@Bean
+public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
+}
+```
+
+Uses BCrypt to securely hash user passwords (recommended by Spring Security).
+
+---
+
+## 🧰 AuthenticationManager (Used During Login)
+
+```java
+@Bean
+public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception
+```
+
+- Configures `userDetailsService` and password encoder
+- Returns a custom `AuthenticationManager` for validating login credentials
+
+---
+
+## ❌ Ignoring Swagger and Static Resources
+
+```java
+@Bean
+public WebSecurityCustomizer webSecurityCustomizer() {
+    return web -> web.ignoring().requestMatchers(...);
+}
+```
+
+These paths will be excluded from Spring Security, allowing access without authentication (e.g., API docs).
+
+---
+
+## ✅ Summary of Features
+
+| Feature                     | Description                                                                 |
+|-----------------------------|-----------------------------------------------------------------------------|
+| JWT Authentication          | Validates JWT token on every request                                        |
+| Custom Exception Handling   | Returns proper JSON for 401/403 errors                                      |
+| Stateless Session           | No server session; every request must include a token                       |
+| CORS Support                | Allows frontend apps from other origins to access APIs                      |
+| Swagger Support             | Allows unauthenticated access to API docs                                   |
+| Password Security           | Uses BCrypt hashing to store passwords safely                               |
+| Method-Level Security       | Supports `@Secured`, `@RolesAllowed`, and similar annotations               |
+
+
+
+
+
 ## 📌 类的作用
 
 这个类是 Spring Security 的核心配置类，目的是为整个微服务系统提供：
@@ -197,207 +400,6 @@ public WebSecurityCustomizer webSecurityCustomizer() {
 | 支持 Swagger 接口文档 | 配置了无需认证可访问文档，便于开发和调试                                  |
 | 加密密码              | 注册或登录时密码使用 BCrypt 加密，提升安全性                              |
 
-
-
-
-## 📌 Purpose of the Class
-
-This class is the core **Spring Security configuration**. It provides:
-
-- ✅ JWT-based login and authentication  
-- ✅ Request-level permission control (which endpoints require login, which don't)  
-- ✅ Custom exception handling (authentication failure, access denied)  
-- ✅ Cross-Origin Resource Sharing (CORS) configuration  
-- ✅ Fully **stateless session** handling (ideal for front-end/back-end separation)
-
----
-
-## 🧱 Class Structure
-
-```java
-@Configuration
-@EnableMethodSecurity(securedEnabled = true, jsr250Enabled = true)
-public class SecurityConfig {
-```
-
-- `@Configuration`: Marks it as a Spring configuration class  
-- `@EnableMethodSecurity`: Enables method-level security annotations like `@Secured`, `@RolesAllowed`
-
----
-
-### 👇 Injected Components
-
-```java
-private final UserAccountServiceImpl userDetailsService;
-private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
-```
-
-These components serve the following roles:
-
-- **userDetailsService**: Custom service for loading user details (roles, credentials, etc.)
-- **jwtAuthenticationEntryPoint**: Handles cases when the user is **not authenticated** (returns 401)
-- **jwtAccessDeniedHandler**: Handles cases when the user is **authenticated but lacks permission** (returns 403)
-
----
-
-## 🔐 JWT Authentication Filter
-
-```java
-@Bean
-public JwtAuthenticationFilter jwtAuthenticationFilter() {
-    return new JwtAuthenticationFilter(...);
-}
-```
-
-- Defines your custom `JwtAuthenticationFilter`, which intercepts every request and validates the JWT token from the header.
-
----
-
-## 🛡️ Core Security Configuration — `filterChain`
-
-```java
-@Bean
-public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter)
-```
-
-### ✅ Main Configurations:
-
-#### 1. Disable CSRF
-
-```java
-http.csrf(AbstractHttpConfigurer::disable)
-```
-
-CSRF protection is disabled because this is a stateless REST API using tokens, not cookies/sessions.
-
----
-
-#### 2. Define Authorization Rules
-
-```java
-.authorizeHttpRequests(auth -> auth
-    .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-    .requestMatchers("/login/**", "/swagger-ui/**", ...).permitAll()
-    .anyRequest().authenticated()
-)
-```
-
-- Allows all OPTIONS preflight requests (for CORS)
-- Permits open access to login and Swagger API docs
-- All other endpoints require authentication
-
----
-
-#### 3. Add JWT Filter
-
-```java
-.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-```
-
-Your JWT filter is inserted into the Spring Security filter chain before the default login filter.
-
----
-
-#### 4. Exception Handling
-
-```java
-.exceptionHandling(e -> e
-    .authenticationEntryPoint(jwtAuthenticationEntryPoint)
-    .accessDeniedHandler(jwtAccessDeniedHandler)
-)
-```
-
-- If not logged in → `jwtAuthenticationEntryPoint` returns a 401 error  
-- If permission is denied → `jwtAccessDeniedHandler` returns a 403 error
-
----
-
-#### 5. Stateless Session
-
-```java
-.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-```
-
-This ensures that **no HTTP session is created**. Each request must carry its own authentication token (e.g. JWT).
-
----
-
-#### 6. Enable CORS
-
-```java
-http.cors(c -> c.configurationSource(corsConfigurationSource()));
-```
-
-Enables your custom CORS configuration (see below).
-
----
-
-## 🌐 CORS Configuration
-
-```java
-@Bean
-public CorsConfigurationSource corsConfigurationSource()
-```
-
-Allows front-end applications (Vue, etc.) hosted on different domains/IPs to access your backend API.
-
-- Multiple allowed origins: IPs, localhost, etc.
-- All HTTP methods allowed
-- All headers allowed
-- Credentials allowed (like cookies or Authorization headers)
-
----
-
-## 🔑 Password Encoder (For Login/Register)
-
-```java
-@Bean
-public PasswordEncoder passwordEncoder() {
-    return new BCryptPasswordEncoder();
-}
-```
-
-Uses BCrypt to securely hash user passwords (recommended by Spring Security).
-
----
-
-## 🧰 AuthenticationManager (Used During Login)
-
-```java
-@Bean
-public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception
-```
-
-- Configures `userDetailsService` and password encoder
-- Returns a custom `AuthenticationManager` for validating login credentials
-
----
-
-## ❌ Ignoring Swagger and Static Resources
-
-```java
-@Bean
-public WebSecurityCustomizer webSecurityCustomizer() {
-    return web -> web.ignoring().requestMatchers(...);
-}
-```
-
-These paths will be excluded from Spring Security, allowing access without authentication (e.g., API docs).
-
----
-
-## ✅ Summary of Features
-
-| Feature                     | Description                                                                 |
-|-----------------------------|-----------------------------------------------------------------------------|
-| JWT Authentication          | Validates JWT token on every request                                        |
-| Custom Exception Handling   | Returns proper JSON for 401/403 errors                                      |
-| Stateless Session           | No server session; every request must include a token                       |
-| CORS Support                | Allows frontend apps from other origins to access APIs                      |
-| Swagger Support             | Allows unauthenticated access to API docs                                   |
-| Password Security           | Uses BCrypt hashing to store passwords safely                               |
-| Method-Level Security       | Supports `@Secured`, `@RolesAllowed`, and similar annotations               |
 
 
 
