@@ -1,3 +1,188 @@
+## 🧩 What Does This Class Do?
+
+This class is a custom **JWT authentication and authorization filter**. It extends `OncePerRequestFilter`, meaning it only executes **once per HTTP request**.
+
+Its main responsibility:
+
+> **Intercept every HTTP request, extract the JWT token from the header, validate it, and set the authentication context for Spring Security.**
+
+---
+
+## 🧱 Injected Components
+
+```java
+@Value("${server.servlet.context-path}")
+private String contextPathProperty;
+```
+
+- Reads the application's context path from `application.yml` or `application.properties`.
+
+```java
+private final UserAccountServiceImpl userDetailsService;
+private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
+```
+
+- `userDetailsService`: Loads user info and permissions.
+- `jwtAuthenticationEntryPoint`: Handles **unauthenticated** errors (401).
+- `jwtAccessDeniedHandler`: Handles **access denied** errors (403).
+
+---
+
+## 🔁 Core Method: `doFilterInternal`
+
+This method processes **every incoming HTTP request** and handles token-based authentication.
+
+---
+
+### ✅ Case 1: Skip Authentication for Swagger and Login Paths
+
+```java
+if (request.getRequestURI().startsWith("/cryptauth/login") || isSwaggerRequest(request)) {
+    filterChain.doFilter(request, response);
+    return;
+}
+```
+
+- If the request is for login or Swagger docs, skip authentication and continue the filter chain.
+
+---
+
+### ✅ Case 2: Parse and Validate the Authorization Header (JWT)
+
+```java
+String token = request.getHeader("Authorization");
+
+if (token != null && token.startsWith("Bearer ")) {
+```
+
+- Retrieves the `Authorization` header.
+- Extracts the token by removing the `"Bearer "` prefix.
+
+---
+
+### 🔍 Token Handling and Permission Checking
+
+#### Step 1: Extract Username
+
+```java
+String username = JwtUtil.extractUserName(token);
+```
+
+Parses the username from the token.
+
+---
+
+#### Step 2: Load User Info + Validate Token
+
+```java
+UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+if (JwtUtil.validateToken(token, userDetails)) {
+```
+
+- Loads user roles/authorities from the database.
+- Validates the token (e.g., expiration, signature, and user match).
+
+---
+
+#### Step 3: Permission Check (Path-Based)
+
+```java
+if (!hasPermission(userDetails, request)) {
+    jwtAccessDeniedHandler.handle(...);
+    return;
+}
+```
+
+- Calls the `hasPermission()` method to verify if the user has the right to access the requested URL.
+- Permissions are based on authorities (e.g., URL prefixes).
+
+---
+
+#### Step 4: Set Authentication in SecurityContext
+
+```java
+UsernamePasswordAuthenticationToken authenticationToken = 
+    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+
+SecurityContextHolder.getContext().setAuthentication(authenticationToken);
+```
+
+- Creates an authentication object and puts it into the Spring Security context.
+
+---
+
+### ⚠️ Exception Handling for Token Errors
+
+- `ExpiredJwtException` → Token expired → respond with 401
+- `JwtException` or `IllegalArgumentException` → Invalid token → respond with 401
+- No token → respond with 401
+
+Handled via:
+
+```java
+jwtAuthenticationEntryPoint.commence(request, response, new AuthenticationException(...))
+```
+
+This sends a unified JSON error response.
+
+---
+
+### 🧪 Special Route Handling: Return "CA success" for Gateway Check
+
+```java
+if (pathSegments[1].equals("cryptauth") && pathSegments[2].startsWith("scaffold")) {
+    response.setStatus(HttpServletResponse.SC_OK);
+    response.getWriter().write("CA success");
+    return;
+}
+```
+
+- If the path is `/cryptauth/scaffold/**`, it's a request from the **API Gateway for CA validation**.
+- Simply return HTTP 200 OK with a `"CA success"` message, no further processing needed.
+
+---
+
+## 🔧 Utility Methods Explained
+
+### 1. `isSwaggerRequest`
+
+Checks if the current request is a Swagger-related endpoint and should be excluded from authentication.
+
+---
+
+### 2. `hasPermission`
+
+```java
+return userDetails.getAuthorities().stream()
+    .anyMatch(grantedAuthority -> strippedPath.startsWith(grantedAuthority.getAuthority()));
+```
+
+- Gets the user’s authorities and checks if any match the requested URL (after removing context path).
+- Enables simple **path-based access control**.
+
+---
+
+### 3. `stripContextPath`
+
+Removes the app’s context path (e.g., `/cryptauth`) from the beginning of the request URI for permission comparison.
+
+---
+
+## ✅ Summary Table
+
+| Feature | Description |
+|--------|-------------|
+| JWT Parsing | Extracts and validates JWT tokens from Authorization headers |
+| User Authentication | Loads user details from DB and validates the token |
+| Permission Check | Verifies if user has permission to access the requested URL |
+| Unified Exception Handling | Handles expired, invalid, or missing tokens with 401 |
+| Swagger Whitelist | Skips authentication for Swagger endpoints |
+| Gateway Support | For `/cryptauth/scaffold/**` requests, returns early with 200 OK if auth passed |
+
+ 😄
+
+
 这段代码系统中用于处理 **JWT 登录认证和权限校验** 的核心过滤器 —— `JwtAuthenticationFilter`。它继承自 `OncePerRequestFilter`，意味着**每个 HTTP 请求只会被执行一次**。
 
 
@@ -183,186 +368,3 @@ return userDetails.getAuthorities().stream()
 
 
 
-## 🧩 What Does This Class Do?
-
-This class is a custom **JWT authentication and authorization filter**. It extends `OncePerRequestFilter`, meaning it only executes **once per HTTP request**.
-
-Its main responsibility:
-
-> **Intercept every HTTP request, extract the JWT token from the header, validate it, and set the authentication context for Spring Security.**
-
----
-
-## 🧱 Injected Components
-
-```java
-@Value("${server.servlet.context-path}")
-private String contextPathProperty;
-```
-
-- Reads the application's context path from `application.yml` or `application.properties`.
-
-```java
-private final UserAccountServiceImpl userDetailsService;
-private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
-```
-
-- `userDetailsService`: Loads user info and permissions.
-- `jwtAuthenticationEntryPoint`: Handles **unauthenticated** errors (401).
-- `jwtAccessDeniedHandler`: Handles **access denied** errors (403).
-
----
-
-## 🔁 Core Method: `doFilterInternal`
-
-This method processes **every incoming HTTP request** and handles token-based authentication.
-
----
-
-### ✅ Case 1: Skip Authentication for Swagger and Login Paths
-
-```java
-if (request.getRequestURI().startsWith("/cryptauth/login") || isSwaggerRequest(request)) {
-    filterChain.doFilter(request, response);
-    return;
-}
-```
-
-- If the request is for login or Swagger docs, skip authentication and continue the filter chain.
-
----
-
-### ✅ Case 2: Parse and Validate the Authorization Header (JWT)
-
-```java
-String token = request.getHeader("Authorization");
-
-if (token != null && token.startsWith("Bearer ")) {
-```
-
-- Retrieves the `Authorization` header.
-- Extracts the token by removing the `"Bearer "` prefix.
-
----
-
-### 🔍 Token Handling and Permission Checking
-
-#### Step 1: Extract Username
-
-```java
-String username = JwtUtil.extractUserName(token);
-```
-
-Parses the username from the token.
-
----
-
-#### Step 2: Load User Info + Validate Token
-
-```java
-UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-if (JwtUtil.validateToken(token, userDetails)) {
-```
-
-- Loads user roles/authorities from the database.
-- Validates the token (e.g., expiration, signature, and user match).
-
----
-
-#### Step 3: Permission Check (Path-Based)
-
-```java
-if (!hasPermission(userDetails, request)) {
-    jwtAccessDeniedHandler.handle(...);
-    return;
-}
-```
-
-- Calls the `hasPermission()` method to verify if the user has the right to access the requested URL.
-- Permissions are based on authorities (e.g., URL prefixes).
-
----
-
-#### Step 4: Set Authentication in SecurityContext
-
-```java
-UsernamePasswordAuthenticationToken authenticationToken = 
-    new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-
-SecurityContextHolder.getContext().setAuthentication(authenticationToken);
-```
-
-- Creates an authentication object and puts it into the Spring Security context.
-
----
-
-### ⚠️ Exception Handling for Token Errors
-
-- `ExpiredJwtException` → Token expired → respond with 401
-- `JwtException` or `IllegalArgumentException` → Invalid token → respond with 401
-- No token → respond with 401
-
-Handled via:
-
-```java
-jwtAuthenticationEntryPoint.commence(request, response, new AuthenticationException(...))
-```
-
-This sends a unified JSON error response.
-
----
-
-### 🧪 Special Route Handling: Return "CA success" for Gateway Check
-
-```java
-if (pathSegments[1].equals("cryptauth") && pathSegments[2].startsWith("scaffold")) {
-    response.setStatus(HttpServletResponse.SC_OK);
-    response.getWriter().write("CA success");
-    return;
-}
-```
-
-- If the path is `/cryptauth/scaffold/**`, it's a request from the **API Gateway for CA validation**.
-- Simply return HTTP 200 OK with a `"CA success"` message, no further processing needed.
-
----
-
-## 🔧 Utility Methods Explained
-
-### 1. `isSwaggerRequest`
-
-Checks if the current request is a Swagger-related endpoint and should be excluded from authentication.
-
----
-
-### 2. `hasPermission`
-
-```java
-return userDetails.getAuthorities().stream()
-    .anyMatch(grantedAuthority -> strippedPath.startsWith(grantedAuthority.getAuthority()));
-```
-
-- Gets the user’s authorities and checks if any match the requested URL (after removing context path).
-- Enables simple **path-based access control**.
-
----
-
-### 3. `stripContextPath`
-
-Removes the app’s context path (e.g., `/cryptauth`) from the beginning of the request URI for permission comparison.
-
----
-
-## ✅ Summary Table
-
-| Feature | Description |
-|--------|-------------|
-| JWT Parsing | Extracts and validates JWT tokens from Authorization headers |
-| User Authentication | Loads user details from DB and validates the token |
-| Permission Check | Verifies if user has permission to access the requested URL |
-| Unified Exception Handling | Handles expired, invalid, or missing tokens with 401 |
-| Swagger Whitelist | Skips authentication for Swagger endpoints |
-| Gateway Support | For `/cryptauth/scaffold/**` requests, returns early with 200 OK if auth passed |
-
- 😄
