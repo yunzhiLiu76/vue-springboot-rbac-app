@@ -1,0 +1,18 @@
+version: ''
+
+services:
+  redis:
+    image: redis:6.2
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - ./data:/data
+    networks:
+      - mynetwork
+
+networks:
+  mynetwork:
+    driver: bridge

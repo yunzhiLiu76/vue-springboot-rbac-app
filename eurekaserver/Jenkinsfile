@@ -1,0 +1,61 @@
+pipeline {
+    agent any
+
+    tools {
+        jdk 'jdk21'   // 这里的 'JDK21' 需要和 Jenkins Global Tool 配置里的一致
+        maven 'maven' // 这里的 'Maven3' 需要和 Jenkins Global Tool 配置里的一致
+    }
+
+    environment {
+        JAVA_HOME = "/var/jenkins_home/jdk"
+        PATH = "$JAVA_HOME/bin:$PATH"
+        MAVEN_OPTS = "-Xmx1024m"
+        harborUser = 'admin'
+        harborPasswd = 'Harbor12345'
+        harborAddress = '8.211.40.36:8083'
+        harborRepo = 'repo'
+    }
+
+    // 存放所有任务的合集
+    stages {
+        stage('拉取Git代码') {
+            steps {
+                checkout scmGit(branches: [[name: '${tag}']], extensions: [], userRemoteConfigs: [[url: 'http://8.211.40.36:28080/com.shuangshuan/eurekaserver.git']])
+
+            }
+        }
+        stage('通过maven构建项目') {
+            steps {
+                sh 'java -version'   // 确认 Jenkins 任务使用的 Java 版本
+                sh '/var/jenkins_home/maven/bin/mvn clean package -DskipTests'
+            }
+        }
+
+        stage('检测代码质量') {
+            steps {
+                sh '/var/jenkins_home/sonar-scanner/bin/sonar-scanner -Dsonar.source=./ -Dsonar.projectname=${JOB_NAME} -Dsonar.projectKey=${JOB_NAME} -Dsonar.java.binaries=./target/ -Dsonar.login=squ_4dd0e59666cc3c13df529c43571633cfb97fbbab'
+            }
+        }
+
+        stage('构建代码') {
+            steps {
+                sh '''mv ./target/*.jar ./docker/
+docker build -t ${JOB_NAME}:${tag} ./docker/'''
+            }
+        }
+
+        stage('制作自定义镜像并发布Harbor') {
+            steps {
+                sh '''docker login -u ${harborUser} -p ${harborPasswd} ${harborAddress}
+docker tag ${JOB_NAME}:${tag} ${harborAddress}/${harborRepo}/${JOB_NAME}:${tag}
+docker push ${harborAddress}/${harborRepo}/${JOB_NAME}:${tag}'''
+            }
+        }
+
+        stage('基于Harbor部署工程') {
+            steps {
+                sshPublisher(publishers: [sshPublisherDesc(configName: 'quantumnode', transfers: [sshTransfer(cleanRemote: false, excludes: '', execCommand: "deploy.sh $harborAddress $harborRepo $JOB_NAME $tag $container_port $host_port", execTimeout: 1120000, flatten: false, makeEmptyDirs: false, noDefaultExcludes: false, patternSeparator: '[, ]+', remoteDirectory: '', remoteDirectorySDF: false, removePrefix: '', sourceFiles: '')], usePromotionTimestamp: false, useWorkspaceInPromotion: false, verbose: false)])
+            }
+        }
+    }
+}

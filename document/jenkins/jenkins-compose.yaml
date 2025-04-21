@@ -1,0 +1,18 @@
+
+services:
+  jenkins:
+    image: jenkins/jenkins:lts  # 建议使用 LTS 版本
+    container_name: jenkins
+    restart: unless-stopped   # 避免容器意外退出
+    ports:
+      - "8090:8080"      # Web UI 端口
+      - "50000:50000"    # 远程构建端口（JNLP）
+    volumes:
+      - /root/jenkins/data:/var/jenkins_home  # Jenkins 数据存储
+      #/var/jenkins_home是jenkins安装好后，jenkins的家目录  jenkins所有的插件，项目，都会在这个目录下操作
+      - /var/run/docker.sock:/var/run/docker.sock #映射宿主机里面docker.sock文件到jenkins容器。
+      #使得容器内部的jenkins可以使用宿主机的docker
+      - /usr/bin/docker:/usr/bin/docker #映射宿主机里面docker命令到jenkins容器
+      - /etc/docker/daemon.json:/etc/docker/daemon.json #将宿主机的daemon.json映射到jenkins容器内部
+    user: root  # 避免权限问题
+

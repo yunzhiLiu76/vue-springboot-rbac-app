@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres
+    container_name: db
+    restart: always
+    ports:
+      - "5432:5432"
+    networks:
+      - sonarnet
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_SHARED_BUFFERS: "64MB"  # 限制 PostgreSQL 共享缓存
+      POSTGRES_WORK_MEM: "8MB"         # 限制查询缓存
+    mem_limit: 512m   #  限制最大内存 512MB
+    cpus: 1           # 限制 CPU 核心数 1
+
+  sonarqube:
+    image: sonarqube:lts-community
+    container_name: sonarqube
+    depends_on:
+      - db
+    restart: always  
+    ports:
+      - "9000:9000"
+    networks:
+      - sonarnet
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
+      SONAR_SEARCH_JAVAOPTS: "-Xms512m -Xmx512m"  # 限制 Elasticsearch 内存占用
+      SONAR_WEB_JAVAOPTS: "-Xms512m -Xmx512m"     # 限制 Web 进程占用
+    mem_limit: 1.5g  # 限制最大内存 1.5GB
+    cpus: 1.5        # 限制 CPU 核心数 1.5
+
+networks:
+  sonarnet:
+    driver: bridge

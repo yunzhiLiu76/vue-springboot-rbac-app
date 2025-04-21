@@ -1,0 +1,30 @@
+version: ''
+
+services:
+  mongo:
+    image: mongo:7.0  # 你可以换成 mongo:6.0 或最新版本
+    container_name: mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - ./data:/data/db  # 数据持久化
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_DATABASE: admin
+    networks:
+      - mynetwork
+    command: ["mongod", "--auth", "--wiredTigerCacheSizeGB", "1"]
+    deploy:
+      resources:
+        limits:
+          cpus: "1"       # 限制最多使用 1 核 CPU
+          memory: "1.5GB" # 限制最多使用 1.5GB 内存
+        reservations:
+          cpus: "0.5"     # 预留 0.5 核 CPU
+          memory: "512MB" # 预留 512MB 内存
+
+networks:
+  mynetwork:
+    driver: bridge

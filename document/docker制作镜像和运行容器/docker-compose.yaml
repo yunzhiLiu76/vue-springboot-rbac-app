@@ -1,0 +1,9 @@
+services:
+  CryptAuth:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    image: cryptauth:v1.0.0
+    container_name: cryptauth
+    ports:
+      - 8084:8080

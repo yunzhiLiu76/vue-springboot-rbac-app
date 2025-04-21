@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title th:text="#{welcome}"></title>
+</head>
+<body>
+<div>
+    <h1>[[#{hello.title}]]</h1>
+</div>
+
+<span th:text="#{hello}"></span><br>
+<span th:text="#{welcome}"></span><br>
+<button type="button" th:text="#{switch-en}"
+        onclick="window.location.href='http://localhost:8080/Scaffold/?lang=en'"></button>
+<button type="button" th:text="#{switch-zh}"
+        onclick="window.location.href='http://localhost:8080/Scaffold/?lang=zh'"></button>
+
+</body>
+</html>
